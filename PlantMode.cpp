@@ -61,7 +61,7 @@ PlantMode::PlantMode() {
 	//Make a scene from scratch using the plant prop and the tile mesh:
 	{ //make a tile floor:
 		scene.load(data_path("city.scene"), [](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		std::cout<<mesh_name + "\n";
+		// std::cout<<mesh_name + "\n";
 		auto &mesh = plant_meshes->lookup(mesh_name);
 		scene.drawables.emplace_back(transform);
 		Scene::Drawable::Pipeline &pipeline = scene.drawables.back().pipeline;
