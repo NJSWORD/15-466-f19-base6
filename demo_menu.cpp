@@ -16,23 +16,23 @@ std::shared_ptr< MenuMode > demo_menu;
 
 Load< void > load_demo_menu(LoadTagDefault, [](){
 	std::vector< MenuMode::Item > items;
-	items.emplace_back("[[ DEMO MENU ]]");
-	items.emplace_back("plant");
+	items.emplace_back("Plant and Maze");
+	items.emplace_back("Start");
 	items.back().on_select = [](MenuMode::Item const &){
 		Mode::set_current(std::make_shared< PlantMode >());
 	};
-	items.emplace_back("lighting - multipass");
-	items.back().on_select = [](MenuMode::Item const &){
-		Mode::set_current(std::make_shared< DemoLightingMultipassMode >());
-	};
-	items.emplace_back("lighting - forward");
-	items.back().on_select = [](MenuMode::Item const &){
-		Mode::set_current(std::make_shared< DemoLightingForwardMode >());
-	};
-	items.emplace_back("lighting - deferred");
-	items.back().on_select = [](MenuMode::Item const &){
-		Mode::set_current(std::make_shared< DemoLightingDeferredMode >());
-	};
+	// items.emplace_back("lighting - multipass");
+	// items.back().on_select = [](MenuMode::Item const &){
+	// 	Mode::set_current(std::make_shared< DemoLightingMultipassMode >());
+	// };
+	// items.emplace_back("lighting - forward");
+	// items.back().on_select = [](MenuMode::Item const &){
+	// 	Mode::set_current(std::make_shared< DemoLightingForwardMode >());
+	// };
+	// items.emplace_back("lighting - deferred");
+	// items.back().on_select = [](MenuMode::Item const &){
+	// 	Mode::set_current(std::make_shared< DemoLightingDeferredMode >());
+	// };
 
 
 	demo_menu = std::make_shared< MenuMode >(items);

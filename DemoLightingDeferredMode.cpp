@@ -8,6 +8,7 @@
 #include "gl_errors.hpp"
 #include "check_fb.hpp"
 
+#include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <iostream>

@@ -8,6 +8,8 @@
 #include "gl_errors.hpp"
 #include "data_path.hpp"
 #include "load_save_png.hpp"
+#include "DrawSprites.hpp"
+#include "Sound.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -21,10 +23,18 @@
 
 Mesh const *plant_tile = nullptr;
 
+Load< Sound::Sample > noise(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("bgm.wav"));
+});
+
 Load< MeshBuffer > plant_meshes(LoadTagDefault, [](){
 	auto ret = new MeshBuffer(data_path("plant.pnct"));
-	plant_tile = &ret->lookup("Tile");
+	plant_tile = &ret->lookup("Ground.SSSS.011");
 	return ret;
+});
+
+Load< SpriteAtlas > new_trade_font_atlas(LoadTagDefault, []() -> SpriteAtlas const * {
+	return new SpriteAtlas(data_path("trade-font"));
 });
 
 Load< GLuint > plant_meshes_for_lit_color_texture_program(LoadTagDefault, [](){
@@ -45,27 +55,41 @@ Load< GLuint > plant_banims_for_bone_lit_color_texture_program(LoadTagDefault, [
 	return new GLuint(plant_banims->make_vao_for_program(bone_lit_color_texture_program->program));
 });
 
+
 PlantMode::PlantMode() {
+	noise_loop = Sound::loop_3D(*noise, 1.0f, glm::vec3(0.0f, 0.0f, 0.0f), 10.0f);
 	//Make a scene from scratch using the plant prop and the tile mesh:
 	{ //make a tile floor:
-		Scene::Drawable::Pipeline tile_info;
-		tile_info = lit_color_texture_program_pipeline;
-		tile_info.vao = *plant_meshes_for_lit_color_texture_program;
-		tile_info.start = plant_tile->start;
-		tile_info.count = plant_tile->count;
+		scene.load(data_path("city.scene"), [](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+		std::cout<<mesh_name + "\n";
+		auto &mesh = plant_meshes->lookup(mesh_name);
+		scene.drawables.emplace_back(transform);
+		Scene::Drawable::Pipeline &pipeline = scene.drawables.back().pipeline;
 
-		for (int32_t x = -5; x <= 5; ++x) {
-			for (int32_t y = -5; y <= 5; ++y) {
-				scene.transforms.emplace_back();
-				Scene::Transform *transform = &scene.transforms.back();
-				transform->name = "Tile-" + std::to_string(x) + "," + std::to_string(y); //<-- no reason to do this, we don't have scene debugger or anything
-				transform->position = glm::vec3(2.0f*x, 2.0f*y, 0.0f);
+		pipeline = lit_color_texture_program_pipeline;
+		pipeline.vao = *plant_meshes_for_lit_color_texture_program;
+		pipeline.type = mesh.type;
+		pipeline.start = mesh.start;
+		pipeline.count = mesh.count;
+	});
+		// Scene::Drawable::Pipeline tile_info;
+		// tile_info = lit_color_texture_program_pipeline;
+		// tile_info.vao = *plant_meshes_for_lit_color_texture_program;
+		// tile_info.start = plant_tile->start;
+		// tile_info.count = plant_tile->count;
 
-				scene.drawables.emplace_back(transform);
-				Scene::Drawable *tile = &scene.drawables.back();
-				tile->pipeline = tile_info;
-			}
-		}
+		// for (int32_t x = -5; x <= 5; ++x) {
+		// 	for (int32_t y = -5; y <= 5; ++y) {
+		// 		scene.transforms.emplace_back();
+		// 		Scene::Transform *transform = &scene.transforms.back();
+		// 		transform->name = "Tile-" + std::to_string(x) + "," + std::to_string(y); //<-- no reason to do this, we don't have scene debugger or anything
+		// 		transform->position = glm::vec3(2.0f*x, 2.0f*y, 0.0f);
+
+		// 		scene.drawables.emplace_back(transform);
+		// 		Scene::Drawable *tile = &scene.drawables.back();
+		// 		tile->pipeline = tile_info;
+		// 	}
+		// }
 	}
 
 	{ //put some plants around the edge:
@@ -92,8 +116,23 @@ PlantMode::PlantMode() {
 			};
 
 			scene.transforms.emplace_back();
-			Scene::Transform *transform = &scene.transforms.back();
-			transform->position.x = x * 2.5f;
+			Scene::Transform *transform = &scene.transforms.back();		
+			if (x == -2) {
+				transform->position.x = 12.0f;
+				transform->position.y = -2.0f;
+			} else if (x == -1) {
+				transform->position.x = -14.0f;
+				transform->position.y = -2.0f;
+			} else if (x == 0) {
+				transform->position.x = 0.0f;
+				transform->position.y = 15.0f;
+			} else if (x == 1) {
+				transform->position.x = -14.0f;
+				transform->position.y = -25.0f;
+			} else if (x == 2) {
+				transform->position.x = 0.0f;
+				transform->position.y = -20.0f;
+			}
 			scene.drawables.emplace_back(transform);
 			Scene::Drawable *plant = &scene.drawables.back();
 			plant->pipeline = plant_info;
@@ -121,6 +160,7 @@ PlantMode::PlantMode() {
 }
 
 PlantMode::~PlantMode() {
+	noise_loop->stop();
 }
 
 bool PlantMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
@@ -129,20 +169,38 @@ bool PlantMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size
 		return false;
 	}
 
-	if (evt.type == SDL_KEYDOWN && evt.key.keysym.scancode == SDL_SCANCODE_UP) {
+	if (evt.type == SDL_KEYDOWN && evt.key.keysym.scancode == SDL_SCANCODE_DOWN) {
 		forward = true;
 		return true;
 	}
-	if (evt.type == SDL_KEYUP && evt.key.keysym.scancode == SDL_SCANCODE_UP) {
+	if (evt.type == SDL_KEYUP && evt.key.keysym.scancode == SDL_SCANCODE_DOWN) {
 		forward = false;
 		return true;
 	}
-	if (evt.type == SDL_KEYDOWN && evt.key.keysym.scancode == SDL_SCANCODE_DOWN) {
+	if (evt.type == SDL_KEYDOWN && evt.key.keysym.scancode == SDL_SCANCODE_UP) {
 		backward = true;
 		return true;
 	}
-		if (evt.type == SDL_KEYUP && evt.key.keysym.scancode == SDL_SCANCODE_DOWN) {
+		if (evt.type == SDL_KEYUP && evt.key.keysym.scancode == SDL_SCANCODE_UP) {
 		backward = false;
+		return true;
+	}
+
+	if (evt.type == SDL_KEYDOWN && evt.key.keysym.scancode == SDL_SCANCODE_RIGHT) {
+		right = true;
+		return true;
+	}
+	if (evt.type == SDL_KEYUP && evt.key.keysym.scancode == SDL_SCANCODE_RIGHT) {
+		right = false;
+		return true;
+	}
+	if (evt.type == SDL_KEYDOWN && evt.key.keysym.scancode == SDL_SCANCODE_LEFT) {
+		left = true;
+		return true;
+	}
+	
+	if (evt.type == SDL_KEYUP && evt.key.keysym.scancode == SDL_SCANCODE_LEFT) {
+		left = false;
 		return true;
 	}
 
@@ -178,8 +236,48 @@ void PlantMode::update(float elapsed) {
 		float step = 0.0f;
 		if (forward) step += elapsed * 4.0f;
 		if (backward) step -= elapsed * 4.0f;
+		float step_new = 0.0f;
+		if (left) step_new += elapsed * 4.0f;
+		if (right) step_new -= elapsed * 4.0f;
 		plant->transform->position.y += step;
-		plant_animations[2].position += step / 1.88803f;
+		plant->transform->position.x += step_new;
+		// left-down -5.75 -61.77
+		// right-down -9.84 -61.77
+		// right-up -9.84 -66
+		// left-up -5.73 -66
+
+		// 0 15
+
+		// 12 -2
+		// -14 -2
+		// -14 -25
+		// 0 -20
+		if(std::abs(plant->transform->position.x - 12) < 2 && std::abs(plant->transform->position.y + 2) < 2 && !s1) {
+			scores ++;
+			s1 = true;
+		}
+		if(std::abs(plant->transform->position.x + 14) < 2 && std::abs(plant->transform->position.y + 2) < 2 && !s2) {
+			scores ++;
+			s2 = true;
+		}
+		if(std::abs(plant->transform->position.x + 14) < 2 && std::abs(plant->transform->position.y + 25) < 2 && !s3) {
+			scores ++;
+			s3 = true;
+		}
+		if(std::abs(plant->transform->position.x) < 2 && std::abs(plant->transform->position.y + 20) < 2 && !s4) {
+			scores ++;
+			s4 = true;
+		}
+		if(std::abs(plant->transform->position.x + 8) < 4 && std::abs(plant->transform->position.y + 64) < 2 && scores == 4) {
+			help_text = "You find the exit!";
+		}
+		// std::cout<<scores;
+		// std::cout<<"\n";
+		// std::cout<<plant->transform->position.x;
+		// std::cout<<", ";
+		// std::cout<<plant->transform->position.y;
+		// std::cout<<"\n";
+		plant_animations[2].position += std::max(std::abs(step), std::abs(step_new)) / 1.88803f;
 		plant_animations[2].position -= std::floor(plant_animations[2].position);
 	}
 
@@ -228,6 +326,22 @@ void PlantMode::draw(glm::uvec2 const &drawable_size) {
 	glCullFace(GL_BACK);
 
 	scene.draw(*camera);
+
+	{ //help text overlay:
+		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_BLEND);
+		glBlendEquation(GL_FUNC_ADD);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		DrawSprites draw(*new_trade_font_atlas, glm::vec2(0,0), glm::vec2(320, 200), drawable_size, DrawSprites::AlignPixelPerfect);
+
+
+		glm::vec2 min, max;
+		std::string new_ht = help_text + " Friends found: " + std::to_string(scores);
+		draw.get_text_extents(new_ht, glm::vec2(0.0f, 0.0f), 1.0f, &min, &max);
+		float x = std::round(160.0f - (0.5f * (max.x + min.x)));
+		draw.draw_text(new_ht, glm::vec2(x, 1.0f), 1.0f, glm::u8vec4(0x00,0x00,0x00,0xff));
+		draw.draw_text(new_ht, glm::vec2(x, 2.0f), 1.0f, glm::u8vec4(0xff,0xff,0xff,0xff));
+	}
 
 	GL_ERRORS();
 }
